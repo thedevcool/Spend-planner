@@ -162,3 +162,51 @@ form > .btn { margin-top:0 }
 .cell input.switch { -webkit-appearance:none; appearance:none; flex:none; width:51px; height:31px; padding:0; margin-left:auto; border-radius:31px; background:rgba(255,255,255,.16); position:relative; cursor:pointer; transition:background .3s }
 .cell input.switch::after { content:''; position:absolute; top:2px; left:2px; width:27px; height:27px; border-radius:50%; background:#fff; box-shadow:0 2px 6px rgba(0,0,0,.4); transition:transform .4s var(--spring) }
 .cell input.switch:checked { background:linear-gradient(135deg,var(--a1),var(--a2)) } .cell input.switch:checked::after { transform:translateX(20px) }
+.cell select { flex:1; min-width:0; text-align:right; text-align-last:right; background:none; border:0; padding:13px 0; outline:0; color-scheme:dark; font-size:17px; -webkit-appearance:none; appearance:none; cursor:pointer }
+.cell select option { background:#14141f; color:#fff }
+
+/* note taker */
+.fab { position:fixed; z-index:21; right:max(16px,calc(50% - 264px)); bottom:calc(env(safe-area-inset-bottom) + 86px); display:flex; align-items:center; gap:7px; height:46px; padding:0 17px; border:1px solid rgba(255,255,255,.14); border-radius:999px; background:color-mix(in srgb,var(--bg) 55%,transparent); -webkit-backdrop-filter:blur(22px) saturate(170%); backdrop-filter:blur(22px) saturate(170%); box-shadow:0 16px 34px -12px rgba(0,0,0,.85); font-weight:700; font-size:15px; font-variant-numeric:tabular-nums; cursor:pointer; transition:transform .3s var(--spring); animation:rise .7s var(--spring) backwards }
+.fab:active { transform:scale(.94) } .fab svg { color:var(--a2) }
+.scrim { position:fixed; inset:0; z-index:40; display:flex; align-items:flex-end; justify-content:center; background:rgba(4,4,10,.55); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); animation:fadein .3s ease }
+@keyframes fadein { from { opacity:0 } }
+@keyframes sheetup { from { transform:translateY(100%) } }
+.panel { position:relative; width:min(560px,100%); max-height:90dvh; overflow-y:auto; overscroll-behavior:contain; padding:0 16px; border-radius:26px 26px 0 0; border:1px solid rgba(255,255,255,.12); border-bottom:0; background:linear-gradient(180deg,rgba(22,22,36,.94),rgba(9,9,17,.98)), var(--solid); box-shadow:0 -20px 60px -20px rgba(0,0,0,.9); animation:sheetup .5s var(--spring) }
+.grab { display:block; width:38px; height:4px; border-radius:4px; background:rgba(255,255,255,.24); margin:8px auto 12px }
+.nhead { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 12px }
+.nhead h2 { font-family:ui-rounded,'SF Pro Rounded',-apple-system,sans-serif; font-size:24px; font-weight:800; margin:0 }
+.nclose { display:grid; place-items:center; width:32px; height:32px; border:0; border-radius:50%; background:rgba(255,255,255,.1); color:var(--label2); font-size:20px; line-height:1; cursor:pointer; transition:transform .2s var(--spring) } .nclose:active { transform:scale(.9) }
+.nbar { display:flex; align-items:center; gap:8px; margin:0 0 14px }
+.nfilter { flex:1; min-width:0; display:flex; gap:2px; overflow-x:auto; scrollbar-width:none } .nfilter::-webkit-scrollbar { display:none }
+.nfilter button { flex:none; padding:7px 12px; border:0; border-radius:999px; background:none; color:var(--label2); font-size:14px; font-weight:600; cursor:pointer; transition:color .3s, background .4s var(--spring) }
+.nfilter button.on { color:var(--ink); background:linear-gradient(135deg,var(--a1),var(--a2)); box-shadow:0 8px 20px -10px color-mix(in srgb,var(--a1) 80%,transparent) }
+.ngear { flex:none; display:inline-flex; align-items:center; gap:5px; padding:8px 12px; border:1px solid rgba(255,255,255,.16); border-radius:999px; background:linear-gradient(135deg,var(--a1),var(--a2)); color:var(--ink); font-size:13px; font-weight:700; cursor:pointer; box-shadow:0 10px 22px -9px color-mix(in srgb,var(--a1) 90%,transparent), inset 0 1px 0 rgba(255,255,255,.35); transition:transform .25s var(--spring) } .ngear:active { transform:scale(.94) } .ngear .car { opacity:.75 }
+.crange { display:flex; align-items:center; gap:8px; margin:0 0 14px; font-size:13px; color:var(--label3) }
+.crange input { flex:1; min-width:0; padding:9px 11px; border-radius:12px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.06); color:inherit; font-size:14px; color-scheme:dark; outline:0; transition:border-color .25s }
+.crange input:focus { border-color:color-mix(in srgb,var(--a2) 60%,transparent) }
+
+.nsum { padding:14px 18px 16px; margin:0 0 16px; border-radius:20px; border:1px solid rgba(255,255,255,.1); box-shadow:0 14px 34px -16px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.09); background:radial-gradient(120% 90% at 0% 0%, color-mix(in srgb,var(--a1) 22%,transparent), transparent 60%), var(--glass); transition:background .6s }
+.nsum.warn { --a1:#ffb020; --a2:#ffd76a } .nsum.over { --a1:#ff3b4e; --a2:#ff8a3d }
+.nrow { display:flex; align-items:center; justify-content:space-between; gap:10px }
+.nbig { font-family:ui-rounded,'SF Pro Rounded',-apple-system,sans-serif; font-size:30px; font-weight:800; letter-spacing:-.6px; font-variant-numeric:tabular-nums; background:linear-gradient(100deg,#fff,var(--a2)); -webkit-background-clip:text; background-clip:text; color:transparent }
+.nval { display:inline-flex; align-items:baseline; flex-wrap:wrap; gap:2px 7px; min-width:0 }
+.nof { font-size:14.5px; font-weight:600; color:var(--label2); font-variant-numeric:tabular-nums; white-space:nowrap }
+.nmeta { margin:5px 0 0; font-size:13px; color:var(--label2) }
+.nsum .wbar { position:relative; margin-top:12px } .nsum .tick { position:absolute; top:0; bottom:0; left:99%; width:2px; background:rgba(255,255,255,.7) }
+.nempty { text-align:center; color:var(--label3); font-size:14px; margin:30px 0 22px }
+
+.chips { display:flex; gap:6px; margin-left:auto; min-width:0; overflow-x:auto; scrollbar-width:none } .chips::-webkit-scrollbar { display:none }
+.tchip { flex:none; padding:6px 12px; border-radius:999px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.06); color:var(--label2); font-size:13.5px; font-weight:600; cursor:pointer; transition:background .3s, color .3s, border-color .3s }
+.tchip.on { color:var(--ink); border-color:transparent; background:linear-gradient(135deg,var(--a1),var(--a2)) }
+
+.composer { position:sticky; bottom:0; z-index:2; margin:12px -16px 0; padding:10px 16px calc(env(safe-area-inset-bottom) + 10px); border-top:1px solid rgba(255,255,255,.1); background:linear-gradient(180deg,rgba(16,16,26,.55),rgba(10,10,18,.98) 55%); -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px) }
+.composer .group { margin:0 0 10px }
+.crow { display:flex; align-items:center; gap:8px }
+.citem, .camt { padding:12px 13px; border-radius:14px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.06); color:inherit; font-size:15px; outline:0; transition:border-color .25s, background .25s }
+.citem { flex:1; min-width:0 } .camt { width:84px; text-align:right; font-variant-numeric:tabular-nums } .camt::-webkit-inner-spin-button { display:none }
+.citem::placeholder, .camt::placeholder { color:var(--label3) }
+.citem:focus, .camt:focus { border-color:color-mix(in srgb,var(--a2) 60%,transparent); background:rgba(255,255,255,.09) }
+.cadd { flex:none; width:44px; height:44px; border:0; border-radius:14px; background:linear-gradient(135deg,var(--a1),var(--a2)); color:var(--ink); font-size:24px; font-weight:700; line-height:1; cursor:pointer; box-shadow:0 10px 22px -8px color-mix(in srgb,var(--a1) 80%,transparent); transition:transform .25s var(--spring), opacity .3s }
+.cadd:active { transform:scale(.92) } .cadd:disabled { opacity:.3; box-shadow:none }
+.car { display:inline-block; width:6px; height:6px; border-right:1.6px solid currentColor; border-bottom:1.6px solid currentColor; transform:rotate(45deg); transition:transform .3s var(--spring) }
+.car.up { transform:rotate(-135deg) }

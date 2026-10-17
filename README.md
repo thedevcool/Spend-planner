@@ -24,6 +24,7 @@ npm run dev
 
 ## Notes
 - Plans are stored in localStorage under a key that includes the account id, so two accounts on the same browser keep separate plans. Data saved before accounts existed is migrated automatically on first sign-in.
+- Spending log (`v6`): the floating note taker records what you bought (or plan to buy) with an optional source and date. It filters by day/week/month/year or a custom range and flags yellow at 99% of your money sources, red once past them. In the note options you can switch between using your plan's sources and keeping notes fully separate.
 - Supabase's anon key is public by design; it only gates sign-in here. No plan data is sent to Supabase.
 - Free Supabase projects pause after ~1 week of inactivity — visiting the dashboard and unpausing restores sign-in.
 - localStorage is per browser and per device. Use Summary > Export backup to move data.

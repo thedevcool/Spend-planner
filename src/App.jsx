@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase, authMsg } from './supabase.js'
 
-const VERSION = 'v5'
+const VERSION = 'v6'
 const wantsGlance = () => new URLSearchParams(location.search).get('view') === 'glance'
 const THEMES = [['aurora', 'Aurora'], ['mint', 'Mint'], ['citrus', 'Citrus'], ['orchid', 'Orchid']]
 const KEY = 'spendplan.v1' // pre-account key, kept only to migrate old data once
@@ -11,7 +11,9 @@ const SUBS = [
   'Rank each thing against the rest and see what you can cover.',
   'Here is where everything lands.',
 ]
-const EMPTY = { plan: { name: '', type: 'month', month: '', start: '', end: '', currency: '₦' }, sources: [], items: [] }
+const EMPTY = { plan: { name: '', type: 'month', month: '', start: '', end: '', currency: '₦' }, sources: [], items: [], notes: [], linkSources: true }
+const NOTE_PERIODS = [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['year', 'Year'], ['custom', 'Custom']]
+const NOTE_DAYS = [['Today', 0], ['Yesterday', -1], ['Last week', -7]]
 
 const keyFor = (uid) => `${KEY}.${uid}`
 // Loads the signed-in account's plan. Data saved before accounts existed
@@ -27,6 +29,27 @@ const loadFor = (uid) => {
 const uid = () => Math.random().toString(36).slice(2, 9)
 const sum = (a) => a.reduce((t, x) => t + Number(x.amount || 0), 0)
 const fmtDate = (d) => (d ? new Date(d + 'T00:00').toLocaleDateString('en', { day: 'numeric', month: 'short' }) : '')
+
+const isoDay = (d) => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}` }
+const dayAgo = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return isoDay(d) }
+
+// Inclusive [from, to] ISO date range for a filter period. ISO strings compare
+// lexicographically, so range checks stay plain string comparisons.
+const noteRange = (mode, from, to) => {
+  const n = new Date(), y = n.getFullYear(), m = n.getMonth(), d = n.getDate()
+  const at = (yy, mm, dd) => isoDay(new Date(yy, mm, dd))
+  if (mode === 'day') return [at(y, m, d), at(y, m, d)]
+  if (mode === 'week') { const back = (n.getDay() + 6) % 7; return [at(y, m, d - back), at(y, m, d - back + 6)] }
+  if (mode === 'month') return [at(y, m, 1), at(y, m + 1, 0)]
+  if (mode === 'year') return [at(y, 0, 1), at(y, 11, 31)]
+  return [from || '0000-01-01', to || '9999-12-31']
+}
+const noteLabel = (mode, r0, r1) => mode === 'day' ? (r0 === dayAgo(0) ? 'Today' : fmtDate(r0))
+  : mode === 'week' ? 'This week'
+    : mode === 'month' ? new Date(r0 + 'T00:00').toLocaleDateString('en', { month: 'long', year: 'numeric' })
+      : mode === 'year' ? r0.slice(0, 4)
+        : `${fmtDate(r0)} – ${fmtDate(r1)}`
+const noteDayLabel = (d) => d === dayAgo(0) ? 'Today' : d === dayAgo(-1) ? 'Yesterday' : d === dayAgo(-7) ? 'Last week' : fmtDate(d)
 
 const Svg = ({ children, size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
@@ -201,12 +224,19 @@ function Login() {
     if (busy) return
     setErr(''); setNote(''); setBusy(true)
     const creds = { email: email.trim().toLowerCase(), password: pass }
-    const fn = mode === 'in' ? supabase.auth.signInWithPassword : supabase.auth.signUp
-    const { data, error } = await fn(creds)
-    setBusy(false)
-    if (error) return setErr(authMsg(error))
-    // Only happens if "Confirm email" is still on in the Supabase dashboard.
-    if (mode === 'up' && !data.session) setNote('Check your inbox for a confirmation link, then sign in.')
+    try {
+      // Call on the client, never as a detached reference: the auth methods need `this`.
+      const { data, error } = mode === 'in'
+        ? await supabase.auth.signInWithPassword(creds)
+        : await supabase.auth.signUp(creds)
+      if (error) setErr(authMsg(error))
+      // Only happens if "Confirm email" is still on in the Supabase dashboard.
+      else if (mode === 'up' && !data.session) setNote('Check your inbox for a confirmation link, then sign in.')
+    } catch (err) {
+      setErr(authMsg(err))
+    } finally {
+      setBusy(false)
+    }
   }
   if (!supabase) return (
     <><Bg /><main className="login step fwd">
@@ -235,6 +265,167 @@ function Login() {
         </button>
       </div>
     </main></>
+  )
+}
+
+function NoteList({ notes, labelOf, cur, onDel }) {
+  const byDay = new Map()
+  notes.forEach((n, i) => byDay.set(n.date, [...(byDay.get(n.date) || []), { n, i }]))
+  return [...byDay.keys()].sort().reverse().map((date) => {
+    const rows = byDay.get(date).sort((a, b) => b.i - a.i)
+    return (
+      <div key={date}>
+        <p className="gh">{noteDayLabel(date)} · {money(cur, sum(rows.map((r) => r.n)))}</p>
+        <ul className="group list">
+          {rows.map(({ n }) => (
+            <Swipe key={n.id} onRemove={() => onDel(n.id)}>
+              <span className={'pip' + (n.expected ? '' : ' fill')} />
+              <div className="grow">
+                <b>{n.name}</b>
+                <small>{n.expected ? 'To buy' : 'Bought'}{labelOf(n) ? ' · ' + labelOf(n) : ''}</small>
+              </div>
+              <b className="amt">{cur}{n.amount.toLocaleString()}</b>
+            </Swipe>
+          ))}
+        </ul>
+      </div>
+    )
+  })
+}
+
+function NoteTaker({ notes, sources, cur, set, linkSources, userId }) {
+  const [open, setOpen] = useState(false)
+  // Options open themselves until the user dismisses them once, then that choice is kept.
+  const optsKey = `spendplan.opts.${userId}`
+  const [more, setMore] = useState(() => !localStorage.getItem(optsKey))
+  const [period, setPeriod] = useState('month')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [f, setF] = useState({ name: '', amount: '', sourceId: '', source: '', date: dayAgo(0), expected: false })
+
+  const [r0, r1] = noteRange(period, from, to)
+  const shown = notes.filter((n) => n.date >= r0 && n.date <= r1)
+  const spent = sum(shown.filter((n) => !n.expected))
+  const expected = sum(shown.filter((n) => n.expected))
+  const funds = linkSources ? sum(sources) : 0
+  const pct = (v) => (funds > 0 ? (v / funds) * 100 : 0)
+  // Yellow at 99% of the plan's money sources, red once a figure passes them.
+  // No colour at all while notes are kept separate from the plan.
+  const worst = Math.max(pct(spent), pct(expected))
+  const level = funds > 0 ? (worst > 100 ? 'over' : worst >= 99 ? 'warn' : 'ok') : ''
+  const today = sum(notes.filter((n) => n.date === dayAgo(0) && !n.expected))
+  const labelOf = (n) => n.sourceId ? (sources.find((s) => s.id === n.sourceId)?.from || '') : n.source || ''
+  const canAdd = !!(f.name.trim() && Number(f.amount))
+  // Only a dismissal is remembered, so the panel stops opening itself after the first time.
+  const toggleMore = () => {
+    if (!more) return setMore(true)
+    setMore(false)
+    localStorage.setItem(optsKey, '1')
+  }
+
+  useEffect(() => { document.body.style.overflow = open ? 'hidden' : ''; return () => { document.body.style.overflow = '' } }, [open])
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
+    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+
+  const add = (e) => {
+    e.preventDefault()
+    if (!canAdd) return
+    set({ notes: [...notes, {
+      id: uid(), name: f.name.trim(), amount: Number(f.amount), date: f.date || dayAgo(0), expected: f.expected,
+      sourceId: linkSources ? f.sourceId : '', source: linkSources ? '' : f.source.trim(),
+    }] })
+    setF({ name: '', amount: '', sourceId: '', source: '', date: f.date, expected: false })
+  }
+
+  return (
+    <>
+      <button className="fab" onClick={() => setOpen(true)} aria-label="Open notes">
+        <Svg size={17}><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z" /><path d="M13.5 6.5l3 3" /></Svg>
+        <span>{today > 0 ? money(cur, today) : 'Note'}</span>
+      </button>
+
+      {open && (
+        <div className="scrim" onClick={() => setOpen(false)}>
+          <div className="panel" role="dialog" aria-modal="true" aria-label="Spending notes" onClick={(e) => e.stopPropagation()}>
+            <i className="grab" />
+            <header className="nhead">
+              <h2>Notes</h2>
+              <button className="nclose" onClick={() => setOpen(false)} aria-label="Close">×</button>
+            </header>
+
+            <div className="nbar">
+              <div className="nfilter">
+                {NOTE_PERIODS.map(([v, l]) => <button key={v} className={period === v ? 'on' : ''} onClick={() => setPeriod(v)}>{l}</button>)}
+              </div>
+              <button type="button" className="ngear" onClick={toggleMore} aria-expanded={more} aria-label="Note options">
+                <Svg size={15}><path d="M3 8h9M17 8h4M3 16h4M11 16h10" /><circle cx="14.6" cy="8" r="2" fill="currentColor" /><circle cx="8.6" cy="16" r="2" fill="currentColor" /></Svg>
+                {f.expected ? 'To buy' : 'Bought'}
+                <i className={'car' + (more ? ' up' : '')} />
+              </button>
+            </div>
+            {period === 'custom' && (
+              <div className="crange">
+                <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From date" />
+                <span>to</span>
+                <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To date" />
+              </div>
+            )}
+
+            <section className={'nsum' + (level ? ' ' + level : '')}>
+              <div className="nrow">
+                <span className="nval">
+                  <b className="nbig"><Num value={spent} prefix={cur} /></b>
+                  {funds > 0 && <small className="nof">of {money(cur, funds)}</small>}
+                </span>
+                {level && <span className={'chip' + (level === 'over' ? ' bad' : ' ok')}>{level === 'over' ? 'Over sources' : 'Near the limit'}</span>}
+              </div>
+              <p className="nmeta">{noteLabel(period, r0, r1)} · {money(cur, expected)} to buy</p>
+              {funds > 0 && <div className="wbar"><i style={{ width: Math.min(100, pct(spent)) + '%' }} /><b className="tick" /></div>}
+            </section>
+
+            {shown.length > 0
+              ? <NoteList notes={shown} labelOf={labelOf} cur={cur} onDel={(id) => set({ notes: notes.filter((n) => n.id !== id) })} />
+              : <p className="nempty">Nothing here yet.</p>}
+
+            <form className="composer" onSubmit={add}>
+              {more && (
+                <div className="group">
+                  <div className="cell in"><span>Type</span>
+                    <div className="chips">
+                      <button type="button" className={'tchip' + (f.expected ? '' : ' on')} onClick={() => setF({ ...f, expected: false })}>Bought</button>
+                      <button type="button" className={'tchip' + (f.expected ? ' on' : '')} onClick={() => setF({ ...f, expected: true })}>To buy</button>
+                    </div>
+                  </div>
+                  <div className="cell in"><span>When</span>
+                    <div className="chips">
+                      {NOTE_DAYS.map(([l, off]) => <button type="button" key={l} className={'tchip' + (f.date === dayAgo(off) ? ' on' : '')} onClick={() => setF({ ...f, date: dayAgo(off) })}>{l}</button>)}
+                    </div>
+                  </div>
+                  <label className="cell in"><span>On</span><input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></label>
+                  {linkSources
+                    ? <label className="cell in"><span>Source</span>
+                        <select value={f.sourceId} onChange={(e) => setF({ ...f, sourceId: e.target.value })}>
+                          <option value="">None</option>
+                          {sources.map((s) => <option key={s.id} value={s.id}>{s.from}</option>)}
+                        </select>
+                      </label>
+                    : <label className="cell in"><span>Source</span><input value={f.source} placeholder="Cash, card…" onChange={(e) => setF({ ...f, source: e.target.value })} /></label>}
+                  <label className="cell"><span>Use plan sources</span><input type="checkbox" className="switch" checked={linkSources} onChange={(e) => set({ linkSources: e.target.checked })} /></label>
+                </div>
+              )}
+              <div className="crow">
+                <input className="citem" value={f.name} placeholder="What did you buy?" onChange={(e) => setF({ ...f, name: e.target.value })} autoFocus />
+                <input className="camt" type="number" inputMode="decimal" min="0" value={f.amount} placeholder="0" onChange={(e) => setF({ ...f, amount: e.target.value })} />
+                <button className="cadd" disabled={!canAdd} aria-label="Add note">+</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -359,6 +550,8 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      <NoteTaker notes={data.notes || []} sources={sources} cur={cur} set={set} linkSources={data.linkSources !== false} userId={store.uid} />
     </div>
   )
 }
