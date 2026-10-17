@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { supabase, authMsg } from './supabase.js'
 
 const VERSION = 'v5'
-const AUTH = 'spendplan.auth'
-const isAuthed = () => sessionStorage.getItem(AUTH) === '1' || localStorage.getItem(AUTH) === '1'
 const wantsGlance = () => new URLSearchParams(location.search).get('view') === 'glance'
 const THEMES = [['aurora', 'Aurora'], ['mint', 'Mint'], ['citrus', 'Citrus'], ['orchid', 'Orchid']]
-const KEY = 'spendplan.v1'
-const EMAIL = import.meta.env.VITE_AUTH_EMAIL
-const PASS = import.meta.env.VITE_AUTH_PASSWORD
+const KEY = 'spendplan.v1' // pre-account key, kept only to migrate old data once
 const STEPS = ['Plan', 'List', 'Summary']
 const SUBS = [
   'Name your plan, then add the money you will spend from.',
@@ -16,8 +13,16 @@ const SUBS = [
 ]
 const EMPTY = { plan: { name: '', type: 'month', month: '', start: '', end: '', currency: '₦' }, sources: [], items: [] }
 
-const load = () => {
-  try { return { ...EMPTY, ...JSON.parse(localStorage.getItem(KEY)) } } catch { return EMPTY }
+const keyFor = (uid) => `${KEY}.${uid}`
+// Loads the signed-in account's plan. Data saved before accounts existed
+// (plain KEY) is copied over once so nothing is lost on upgrade.
+const loadFor = (uid) => {
+  let raw = localStorage.getItem(keyFor(uid))
+  if (raw == null) {
+    raw = localStorage.getItem(KEY)
+    if (raw != null) localStorage.setItem(keyFor(uid), raw)
+  }
+  try { return { ...EMPTY, ...JSON.parse(raw) } } catch { return EMPTY }
 }
 const uid = () => Math.random().toString(36).slice(2, 9)
 const sum = (a) => a.reduce((t, x) => t + Number(x.amount || 0), 0)
@@ -184,45 +189,87 @@ function Swipe({ children, onRemove }) {
   )
 }
 
-function Login({ onOk }) {
+function Login() {
+  const [mode, setMode] = useState('in')
   const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
   const [err, setErr] = useState('')
-  const [stay, setStay] = useState(true)
-  const submit = (e) => {
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const submit = async (e) => {
     e.preventDefault()
-    if (email.trim().toLowerCase() === (EMAIL || '').toLowerCase() && pass === PASS) {
-      sessionStorage.setItem(AUTH, '1'); if (stay) localStorage.setItem(AUTH, '1'); onOk()
-    } else setErr('That email or password is not right.')
+    if (busy) return
+    setErr(''); setNote(''); setBusy(true)
+    const creds = { email: email.trim().toLowerCase(), password: pass }
+    const fn = mode === 'in' ? supabase.auth.signInWithPassword : supabase.auth.signUp
+    const { data, error } = await fn(creds)
+    setBusy(false)
+    if (error) return setErr(authMsg(error))
+    // Only happens if "Confirm email" is still on in the Supabase dashboard.
+    if (mode === 'up' && !data.session) setNote('Check your inbox for a confirmation link, then sign in.')
   }
+  if (!supabase) return (
+    <><Bg /><main className="login step fwd">
+      <div className="logo"><i /></div>
+      <h1>Spend Plan</h1>
+      <p className="err">Auth is not configured yet. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env (see .env.example) and restart the dev server.</p>
+    </main></>
+  )
   return (
     <><Bg /><main className="login step fwd">
       <div className="logo"><i /></div>
       <h1>Spend Plan</h1>
-      <p className="sub">Sign in to continue.</p>
+      <p className="sub">{mode === 'in' ? 'Sign in to continue.' : 'Create your account.'}</p>
       <form onSubmit={submit}>
         <div className="group">
-          <label className="cell in"><span>Email</span><input type="email" value={email} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} autoFocus /></label>
-          <label className="cell in"><span>Password</span><input type="password" value={pass} placeholder="Required" onChange={(e) => setPass(e.target.value)} /></label>
-          <label className="cell"><span>Stay signed in</span><input type="checkbox" className="switch" checked={stay} onChange={(e) => setStay(e.target.checked)} /></label>
+          <label className="cell in"><span>Email</span><input type="email" value={email} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} autoFocus required /></label>
+          <label className="cell in"><span>Password</span><input type="password" minLength={6} value={pass} placeholder={mode === 'up' ? 'At least 6 characters' : 'Required'} onChange={(e) => setPass(e.target.value)} required /></label>
         </div>
         {err && <p className="err">{err}</p>}
-        <button className="btn">Sign in</button>
+        {note && <p className="ghint">{note}</p>}
+        <button className="btn" disabled={busy}>{busy ? 'Working…' : mode === 'in' ? 'Sign in' : 'Create account'}</button>
       </form>
+      <div className="group" style={{ marginTop: 22 }}>
+        <button type="button" className="cell tap" onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setErr(''); setNote('') }}>
+          {mode === 'in' ? 'New here? Create an account' : 'Already have an account? Sign in'}
+        </button>
+      </div>
     </main></>
   )
 }
 
 export default function App() {
-  const [authed, setAuthed] = useState(isAuthed)
-  const [data, setData] = useState(load)
-  const [step, setStep] = useState(() => { const d = load(); return d.items.length ? 2 : d.sources.length ? 1 : 0 })
+  const [session, setSession] = useState(null)
+  const [ready, setReady] = useState(false)
+  const [store, setStore] = useState({ uid: null, value: EMPTY })
+  const [step, setStep] = useState(0)
   const [dir, setDir] = useState('fwd')
   const [theme, setTheme] = useState(() => localStorage.getItem('spendplan.theme') || 'aurora')
   const [pulse, setPulse] = useState(false)
   const [glance, setGlance] = useState(wantsGlance)
   const first = useRef(true)
-  useEffect(() => { localStorage.setItem(KEY, JSON.stringify(data)) }, [data])
+
+  const userId = session?.user?.id ?? null
+  // React's adjust-state-during-render: swap in the account's plan as soon as
+  // we know who is signed in, before anything can save the previous state back.
+  if (userId !== store.uid) {
+    const value = userId ? loadFor(userId) : EMPTY
+    setStore({ uid: userId, value })
+    setStep(value.items.length ? 2 : value.sources.length ? 1 : 0)
+  }
+  const data = store.value
+  const setData = (fn) => setStore((s) => ({ ...s, value: fn(s.value) }))
+
+  useEffect(() => {
+    if (!supabase) { setReady(true); return }
+    supabase.auth.getSession().then(({ data: d }) => { setSession(d.session); setReady(true) })
+    const { data: sub } = supabase.auth.onAuthStateChange((_, s) => setSession(s))
+    return () => sub.subscription.unsubscribe()
+  }, [])
+  useEffect(() => {
+    if (!store.uid) return
+    localStorage.setItem(keyFor(store.uid), JSON.stringify(store.value))
+  }, [store])
   useEffect(() => { document.body.dataset.theme = theme; localStorage.setItem('spendplan.theme', theme) }, [theme])
 
   const { plan, sources, items } = data
@@ -239,9 +286,10 @@ export default function App() {
   const stats = { covered, cut, have, spent, pct, needs: sum(items.filter((i) => i.kind === 'need')), wants: sum(items.filter((i) => i.kind === 'want')) }
   useEffect(() => { document.body.classList.toggle('over', over) }, [over])
   useEffect(() => {
-    const onStorage = (e) => { if (e.key === KEY) setData(load()) }
+    if (!store.uid) return
+    const onStorage = (e) => { if (e.key === keyFor(store.uid)) setData(() => loadFor(store.uid)) }
     window.addEventListener('storage', onStorage); return () => window.removeEventListener('storage', onStorage)
-  }, [])
+  }, [store.uid])
   useEffect(() => {
     if (!('setAppBadge' in navigator)) return
     const n = cut.length
@@ -252,7 +300,8 @@ export default function App() {
     setPulse(true); const t = setTimeout(() => setPulse(false), 650); return () => clearTimeout(t)
   }, [left])
 
-  if (!authed) return <Login onOk={() => setAuthed(true)} />
+  if (!ready) return null
+  if (!session) return <Login />
   const period0 = plan.type === 'month'
     ? (plan.month ? new Date(plan.month + '-01T00:00').toLocaleDateString('en', { month: 'long', year: 'numeric' }) : '')
     : [fmtDate(plan.start), fmtDate(plan.end)].filter(Boolean).join(' to ')
@@ -493,7 +542,7 @@ function SummaryStep({ items, total, spent, left, over, have, cur, set, data, pl
       <div className="group">
         <button className="cell tap" onClick={exportJson}>Export backup</button>
         <label className="cell tap">Import backup<input type="file" accept="application/json" hidden onChange={importJson} /></label>
-        <button className="cell tap" onClick={() => { sessionStorage.removeItem(AUTH); localStorage.removeItem(AUTH); location.reload() }}>Sign out</button>
+        <button className="cell tap" onClick={() => supabase.auth.signOut()}>Sign out</button>
         <button className="cell tap danger" onClick={reset}>Start over</button>
       </div>
       <p className="ver">Spend Plan {VERSION}</p>
