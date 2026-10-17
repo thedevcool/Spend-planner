@@ -1,15 +1,119 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
+const VERSION = 'v4'
+const THEMES = [['aurora', 'Aurora'], ['mint', 'Mint'], ['citrus', 'Citrus'], ['orchid', 'Orchid']]
 const KEY = 'spendplan.v1'
 const EMAIL = import.meta.env.VITE_AUTH_EMAIL
 const PASS = import.meta.env.VITE_AUTH_PASSWORD
-const EMPTY = { plan: { name: '', type: 'month', start: '', end: '', currency: '₦' }, sources: [], items: [] }
+const STEPS = ['Plan', 'List', 'Summary']
+const SUBS = [
+  'Name your plan, then add the money you will spend from.',
+  'Rank each thing against the rest and see what you can cover.',
+  'Here is where everything lands.',
+]
+const EMPTY = { plan: { name: '', type: 'month', month: '', start: '', end: '', currency: '₦' }, sources: [], items: [] }
 
 const load = () => {
   try { return { ...EMPTY, ...JSON.parse(localStorage.getItem(KEY)) } } catch { return EMPTY }
 }
 const uid = () => Math.random().toString(36).slice(2, 9)
 const sum = (a) => a.reduce((t, x) => t + Number(x.amount || 0), 0)
+const fmtDate = (d) => (d ? new Date(d + 'T00:00').toLocaleDateString('en', { day: 'numeric', month: 'short' }) : '')
+
+const Svg = ({ children, size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+)
+const ICONS = [
+  <Svg key="p"><rect x="4" y="5" width="16" height="15" rx="3" /><path d="M4 10h16M9 3v4M15 3v4" /></Svg>,
+  <Svg key="l"><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.5" cy="6" r="1" fill="currentColor" /><circle cx="4.5" cy="12" r="1" fill="currentColor" /><circle cx="4.5" cy="18" r="1" fill="currentColor" /></Svg>,
+  <Svg key="s"><path d="M5 20v-9M12 20V5M19 20v-7" strokeWidth="2.6" /></Svg>,
+]
+const Chev = ({ left }) => <Svg size={18}><path d={left ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'} strokeWidth="2.4" /></Svg>
+
+function Num({ value, prefix = '' }) {
+  const [v, setV] = useState(value)
+  const from = useRef(value)
+  useEffect(() => {
+    const start = from.current, end = value
+    if (start === end || matchMedia('(prefers-reduced-motion: reduce)').matches) { setV(end); from.current = end; return }
+    const t0 = performance.now(), d = 550
+    let id
+    const tick = (t) => {
+      const p = Math.min(1, (t - t0) / d)
+      const cur = start + (end - start) * (1 - Math.pow(1 - p, 3))
+      setV(cur); from.current = cur
+      if (p < 1) id = requestAnimationFrame(tick); else from.current = end
+    }
+    id = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(id)
+  }, [value])
+  const r = Math.round(v)
+  return <>{r < 0 ? '-' : ''}{prefix}{Math.abs(r).toLocaleString()}</>
+}
+
+function Ring({ pct }) {
+  const c = 2 * Math.PI * 34
+  return (
+    <div className="ring">
+      <svg viewBox="0 0 80 80">
+        <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style={{ stopColor: 'var(--a1)' }} /><stop offset="1" style={{ stopColor: 'var(--a2)' }} /></linearGradient></defs>
+        <circle cx="40" cy="40" r="34" className="rt" />
+        <circle cx="40" cy="40" r="34" className="rf" stroke="url(#rg)" strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} transform="rotate(-90 40 40)" />
+      </svg>
+      <b><Num value={Math.round(pct)} />%</b>
+    </div>
+  )
+}
+
+function Confetti() {
+  const bits = useRef(Array.from({ length: 34 }, (_, i) => ({ x: (Math.random() - .5) * 340, y: -(140 + Math.random() * 240), r: Math.random() * 720 - 360, d: Math.random() * .25, c: i % 3 }))).current
+  return (
+    <div className="confetti" aria-hidden="true">
+      {bits.map((b, i) => <i key={i} className={'c' + b.c} style={{ '--x': b.x + 'px', '--y': b.y + 'px', '--r': b.r + 'deg', animationDelay: b.d + 's' }} />)}
+    </div>
+  )
+}
+
+const Bg = () => <div className="bg"><i /><i /><i /></div>
+
+function Seg({ value, options, onChange }) {
+  const i = options.findIndex((o) => o[0] === value)
+  return (
+    <div className="seg" style={{ '--n': options.length, '--i': i }}>
+      <span className="thumb" />
+      {options.map(([v, l]) => (
+        <button type="button" key={v} className={v === value ? 'on' : ''} onClick={() => onChange(v)}>{l}</button>
+      ))}
+    </div>
+  )
+}
+
+function Swipe({ children, onRemove }) {
+  const [dx, setDx] = useState(0)
+  const [out, setOut] = useState(false)
+  const st = useRef(null)
+  const remove = () => { setOut(true); setTimeout(onRemove, 280) }
+  return (
+    <li className={'swipe' + (out ? ' out' : '')}>
+      <button className="del" onClick={remove} tabIndex={-1}>Delete</button>
+      <div
+        className="slide"
+        style={{ transform: `translateX(${dx}px)`, transition: st.current ? 'none' : undefined }}
+        onTouchStart={(e) => { st.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, base: dx, lock: null } }}
+        onTouchMove={(e) => {
+          const s = st.current; if (!s) return
+          const x = e.touches[0].clientX - s.x, y = e.touches[0].clientY - s.y
+          if (s.lock === null && (Math.abs(x) > 8 || Math.abs(y) > 8)) s.lock = Math.abs(x) > Math.abs(y) ? 'h' : 'v'
+          if (s.lock === 'h') setDx(Math.max(-160, Math.min(0, s.base + x)))
+        }}
+        onTouchEnd={() => { const s = st.current; st.current = null; if (!s) return; if (dx < -130) return remove(); setDx(dx < -44 ? -88 : 0) }}
+      >
+        {children}
+        <button className="x" aria-label="Delete" onClick={remove}>×</button>
+      </div>
+    </li>
+  )
+}
 
 function Login({ onOk }) {
   const [email, setEmail] = useState('')
@@ -19,136 +123,165 @@ function Login({ onOk }) {
     e.preventDefault()
     if (email.trim().toLowerCase() === (EMAIL || '').toLowerCase() && pass === PASS) {
       sessionStorage.setItem('spendplan.auth', '1'); onOk()
-    } else setErr('Email or password is wrong.')
+    } else setErr('That email or password is not right.')
   }
   return (
-    <main className="login">
+    <><Bg /><main className="login step fwd">
+      <div className="logo"><i /></div>
       <h1>Spend Plan</h1>
+      <p className="sub">Sign in to continue.</p>
       <form onSubmit={submit}>
-        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
-        <input type="password" placeholder="Password" value={pass} onChange={(e) => setPass(e.target.value)} />
+        <div className="group">
+          <label className="cell in"><span>Email</span><input type="email" value={email} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} autoFocus /></label>
+          <label className="cell in"><span>Password</span><input type="password" value={pass} placeholder="Required" onChange={(e) => setPass(e.target.value)} /></label>
+        </div>
         {err && <p className="err">{err}</p>}
         <button className="btn">Sign in</button>
       </form>
-    </main>
+    </main></>
   )
 }
 
 export default function App() {
   const [authed, setAuthed] = useState(sessionStorage.getItem('spendplan.auth') === '1')
   const [data, setData] = useState(load)
-  const [tab, setTab] = useState('plan')
+  const [step, setStep] = useState(() => { const d = load(); return d.items.length ? 2 : d.sources.length ? 1 : 0 })
+  const [dir, setDir] = useState('fwd')
+  const [theme, setTheme] = useState(() => localStorage.getItem('spendplan.theme') || 'aurora')
+  const [pulse, setPulse] = useState(false)
+  const first = useRef(true)
   useEffect(() => { localStorage.setItem(KEY, JSON.stringify(data)) }, [data])
+  useEffect(() => { document.body.dataset.theme = theme; localStorage.setItem('spendplan.theme', theme) }, [theme])
 
   const { plan, sources, items } = data
   const cur = plan.currency || '₦'
-  const money = (n) => cur + Number(n || 0).toLocaleString()
   const total = sum(sources)
-  const have = sum(sources.filter((s) => s.status === 'have'))
   const spent = sum(items)
   const left = total - spent
   const over = items.length > 0 && left < 0
-
   useEffect(() => { document.body.classList.toggle('over', over) }, [over])
+  useEffect(() => {
+    if (first.current) { first.current = false; return }
+    setPulse(true); const t = setTimeout(() => setPulse(false), 650); return () => clearTimeout(t)
+  }, [left])
 
   if (!authed) return <Login onOk={() => setAuthed(true)} />
 
   const set = (patch) => setData((d) => ({ ...d, ...patch }))
+  const go = (n) => { if (n === step) return; setDir(n > step ? 'fwd' : 'back'); setStep(n); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+  const canNext = step === 0 ? sources.length > 0 : step === 1 ? items.length > 0 : false
+  const period = plan.type === 'month'
+    ? (plan.month ? new Date(plan.month + '-01T00:00').toLocaleDateString('en', { month: 'long', year: 'numeric' }) : '')
+    : [fmtDate(plan.start), fmtDate(plan.end)].filter(Boolean).join(' to ')
+  const pct = total ? Math.min(100, (spent / total) * 100) : spent ? 100 : 0
+  const have = sum(sources.filter((s) => s.status === 'have'))
+  const common = { plan, sources, items, set, cur, total, spent, left, over, have }
 
   return (
     <div className="app">
-      <header>
-        <div>
-          <h1>{plan.name || 'Spend Plan'}</h1>
-          <p className="muted">{plan.start ? `${plan.start}${plan.end ? ' to ' + plan.end : ''}` : 'No dates set'}</p>
-        </div>
-        <div className={'left' + (over ? ' neg' : '')}>
-          <small>{over ? 'Over by' : 'Left to spend'}</small>
-          <strong>{money(Math.abs(left))}</strong>
-        </div>
+      <Bg />
+      <header className="nav">
+        <button className="navbtn" style={{ visibility: step > 0 ? 'visible' : 'hidden' }} onClick={() => go(step - 1)}><Chev left />{STEPS[step - 1]}</button>
+        <span className="navtitle">{plan.name || 'Spend Plan'}</span>
+        <button className="navbtn" style={{ visibility: step < 2 ? 'visible' : 'hidden' }} disabled={!canNext} onClick={() => go(step + 1)}>{STEPS[step + 1]}<Chev /></button>
       </header>
 
-      <nav>
-        {['plan', 'list', 'summary'].map((t) => (
-          <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
-            {t === 'plan' ? 'Plan' : t === 'list' ? 'List' : 'Summary'}
+      <main className="page">
+        <div className="eyebrow">
+          <span>Step {step + 1} of 3</span>
+          <div className="swatches">{THEMES.map(([t, l]) => <button key={t} className={'sw ' + t + (theme === t ? ' on' : '')} aria-label={l + ' theme'} onClick={() => setTheme(t)} />)}</div>
+        </div>
+        <h1 key={"t" + step} className="large fade">{STEPS[step]}</h1>
+        <p className="sub">{SUBS[step]}{period && step === 0 ? '' : ''}</p>
+
+        <section className="card hero">
+          <div className="hl">
+            <span className="lab">{over ? 'Over budget by' : 'Left to spend'}</span>
+            <div className={'big' + (pulse ? ' pulse' : '')}><Num value={Math.abs(left)} prefix={cur} /></div>
+            <span className="lab small">{total ? `of ${cur}${total.toLocaleString()}` : 'Add your money to begin'}{period ? ' · ' + period : ''}</span>
+          </div>
+          <Ring pct={pct} />
+        </section>
+
+        <div key={"s" + step} className={'step ' + dir}>
+          {step === 0 && <PlanStep {...common} />}
+          {step === 1 && <ListStep {...common} />}
+          {step === 2 && <SummaryStep {...common} data={data} />}
+          {step < 2 && <button className="btn" disabled={!canNext} onClick={() => go(step + 1)}>{step === 0 ? 'Continue to List' : 'See Summary'}</button>}
+        </div>
+      </main>
+
+      <nav className="tabs" style={{ '--i': step }}>
+        {STEPS.map((s, i) => (
+          <button key={s} className={i === step ? 'on' : ''} disabled={i > 0 && sources.length === 0} onClick={() => go(i)}>
+            {ICONS[i]}<span>{s}</span>
           </button>
         ))}
       </nav>
-
-      {tab === 'plan' && <PlanTab {...{ plan, sources, set, money, total, have }} />}
-      {tab === 'list' && <ListTab {...{ items, total, set, money }} />}
-      {tab === 'summary' && <SummaryTab {...{ data, set, money, total, have, spent, left, over }} />}
     </div>
   )
 }
 
-function PlanTab({ plan, sources, set, money, total, have }) {
+function PlanStep({ plan, sources, set, cur }) {
   const [f, setF] = useState({ from: '', amount: '', status: 'have', date: '' })
   const upd = (k, v) => set({ plan: { ...plan, [k]: v } })
   const add = (e) => {
     e.preventDefault()
-    if (!f.from || !Number(f.amount)) return
-    set({ sources: [...sources, { id: uid(), ...f, amount: Number(f.amount) }] })
+    if (!f.from.trim() || !Number(f.amount)) return
+    set({ sources: [...sources, { id: uid(), ...f, from: f.from.trim(), amount: Number(f.amount) }] })
     setF({ from: '', amount: '', status: 'have', date: '' })
   }
   return (
     <>
-      <section>
-        <h2>Plan</h2>
-        <div className="grid">
-          <label>Name<input value={plan.name} placeholder="November" onChange={(e) => upd('name', e.target.value)} /></label>
-          <label>Type
-            <select value={plan.type} onChange={(e) => upd('type', e.target.value)}>
-              <option value="month">Month</option><option value="duration">Custom duration</option>
-            </select>
-          </label>
-          <label>Start<input type="date" value={plan.start} onChange={(e) => upd('start', e.target.value)} /></label>
-          <label>End<input type="date" value={plan.end} onChange={(e) => upd('end', e.target.value)} /></label>
-          <label>Currency<input value={plan.currency} maxLength={4} onChange={(e) => upd('currency', e.target.value)} /></label>
-        </div>
-      </section>
+      <Seg value={plan.type} onChange={(v) => upd('type', v)} options={[['month', 'A month'], ['duration', 'Custom dates']]} />
+      <div className="group">
+        <label className="cell in"><span>Name</span><input value={plan.name} placeholder="November" onChange={(e) => upd('name', e.target.value)} /></label>
+        {plan.type === 'month'
+          ? <label className="cell in"><span>Month</span><input type="month" value={plan.month} onChange={(e) => upd('month', e.target.value)} /></label>
+          : <>
+              <label className="cell in"><span>From</span><input type="date" value={plan.start} onChange={(e) => upd('start', e.target.value)} /></label>
+              <label className="cell in"><span>To</span><input type="date" value={plan.end} onChange={(e) => upd('end', e.target.value)} /></label>
+            </>}
+        <label className="cell in"><span>Currency</span><input value={plan.currency} maxLength={4} onChange={(e) => upd('currency', e.target.value)} /></label>
+      </div>
 
-      <section>
-        <h2>Money sources</h2>
-        <form className="grid" onSubmit={add}>
-          <label>From<input value={f.from} placeholder="Salary, client, savings" onChange={(e) => setF({ ...f, from: e.target.value })} /></label>
-          <label>Amount<input type="number" min="0" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></label>
-          <label>Status
-            <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}>
-              <option value="have">Already have it</option><option value="expected">Still expecting</option>
-            </select>
-          </label>
-          <label>{f.status === 'have' ? 'Received on' : 'Expected on'}<input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></label>
-          <button className="btn">Add source</button>
-        </form>
-        {sources.length === 0 && <p className="muted">Add where your money is coming from.</p>}
-        <ul className="rows">
+      {sources.length > 0 && <>
+        <p className="gh">Money coming in</p>
+        <ul className="group list">
           {sources.map((s) => (
-            <li key={s.id}>
-              <div><b>{s.from}</b><span className="muted">{s.status === 'have' ? 'In hand' : 'Expected'}{s.date ? ' · ' + s.date : ''}</span></div>
-              <div className="r"><b>{money(s.amount)}</b>
-                <button className="x" onClick={() => set({ sources: sources.filter((x) => x.id !== s.id) })} aria-label="Remove">×</button>
-              </div>
-            </li>
+            <Swipe key={s.id} onRemove={() => set({ sources: sources.filter((x) => x.id !== s.id) })}>
+              <span className={'pip' + (s.status === 'have' ? ' fill' : '')} />
+              <div className="grow"><b>{s.from}</b><small>{s.status === 'have' ? 'In hand' : 'Expected'}{s.date ? ' · ' + fmtDate(s.date) : ''}</small></div>
+              <b className="amt">{cur}{s.amount.toLocaleString()}</b>
+            </Swipe>
           ))}
         </ul>
-        {sources.length > 0 && <p className="tot">Total {money(total)}. In hand {money(have)}. Expected {money(total - have)}.</p>}
-      </section>
+        <p className="gf">Swipe left on a source to delete it.</p>
+      </>}
+
+      <p className="gh">Add a source</p>
+      <form onSubmit={add}>
+        <Seg value={f.status} onChange={(v) => setF({ ...f, status: v })} options={[['have', 'I have it'], ['expected', 'Expecting it']]} />
+        <div className="group">
+          <label className="cell in"><span>From</span><input value={f.from} placeholder="Salary, client…" onChange={(e) => setF({ ...f, from: e.target.value })} /></label>
+          <label className="cell in"><span>Amount ({cur})</span><input type="number" inputMode="decimal" min="0" value={f.amount} placeholder="0" onChange={(e) => setF({ ...f, amount: e.target.value })} /></label>
+          <label className="cell in"><span>{f.status === 'have' ? 'Received' : 'Expected'}</span><input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></label>
+        </div>
+        <button className="btn tint">Add source</button>
+      </form>
     </>
   )
 }
 
-function ListTab({ items, total, set, money }) {
+function ListStep({ items, set, cur, total }) {
   const n = items.length
   const [f, setF] = useState({ name: '', kind: 'need', rank: n + 1, amount: '', effect: '' })
-  useEffect(() => { setF((x) => ({ ...x, rank: Math.min(x.rank, n + 1) })) }, [n])
-
+  const rank = Math.min(f.rank, n + 1)
   const add = (e) => {
     e.preventDefault()
-    if (!f.name || !Number(f.amount)) return
+    if (!f.name.trim() || !Number(f.amount)) return
     const next = [...items]
-    next.splice(Number(f.rank) - 1, 0, { id: uid(), name: f.name, kind: f.kind, amount: Number(f.amount), effect: f.effect })
+    next.splice(rank - 1, 0, { id: uid(), name: f.name.trim(), kind: f.kind, amount: Number(f.amount), effect: f.effect.trim() })
     set({ items: next })
     setF({ name: '', kind: 'need', rank: next.length + 1, amount: '', effect: '' })
   }
@@ -161,66 +294,64 @@ function ListTab({ items, total, set, money }) {
   let run = 0
   return (
     <>
-      <section>
-        <h2>Add to list</h2>
-        <form className="grid" onSubmit={add}>
-          <label>What do you want to get<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
-          <label>Need or want
-            <select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
-              <option value="need">Need</option><option value="want">Want</option>
-            </select>
-          </label>
-          <label>Priority
-            <select value={f.rank} onChange={(e) => setF({ ...f, rank: Number(e.target.value) })}>
-              {Array.from({ length: n + 1 }, (_, i) => <option key={i} value={i + 1}>{i + 1}/{n + 1}{i === 0 ? ' (top)' : ''}</option>)}
-            </select>
-          </label>
-          <label>Cost<input type="number" min="0" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></label>
-          <label className="wide">What happens if I don't get it<input value={f.effect} onChange={(e) => setF({ ...f, effect: e.target.value })} /></label>
-          <button className="btn">Add item</button>
-        </form>
-      </section>
+      <p className="gh">New item</p>
+      <form onSubmit={add}>
+        <Seg value={f.kind} onChange={(v) => setF({ ...f, kind: v })} options={[['need', 'Need'], ['want', 'Want']]} />
+        <div className="group">
+          <label className="cell in"><span>Item</span><input value={f.name} placeholder="What do you want?" onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
+          <div className="cell">
+            <span>Priority</span>
+            <span className="val"><Num value={rank} />/{n + 1}</span>
+            <div className="stepper">
+              <button type="button" onClick={() => setF({ ...f, rank: Math.max(1, rank - 1) })} aria-label="Higher priority">−</button>
+              <button type="button" onClick={() => setF({ ...f, rank: Math.min(n + 1, rank + 1) })} aria-label="Lower priority">+</button>
+            </div>
+          </div>
+          <label className="cell in"><span>Cost ({cur})</span><input type="number" inputMode="decimal" min="0" value={f.amount} placeholder="0" onChange={(e) => setF({ ...f, amount: e.target.value })} /></label>
+          <label className="cell in"><span>If skipped</span><input value={f.effect} placeholder="What goes wrong?" onChange={(e) => setF({ ...f, effect: e.target.value })} /></label>
+        </div>
+        <p className="gf">Priority 1 is the first thing you would buy.</p>
+        <button className="btn tint">Add to list</button>
+      </form>
 
-      <section>
-        <h2>Your list</h2>
-        {n === 0 && <p className="muted">Nothing here yet. Add the first thing you want to buy.</p>}
-        <ul className="rows items">
+      {n > 0 && <>
+        <p className="gh">Your list</p>
+        <ul className="group list">
           {items.map((it, i) => {
             run += it.amount
             const bad = run > total
             return (
-              <li key={it.id} className={bad ? 'bad' : ''}>
-                <div className="rk">{i + 1}/{n}</div>
-                <div className="grow">
-                  <b>{it.name}</b> <span className={'tag ' + it.kind}>{it.kind}</span>
-                  {it.effect && <p className="muted">If skipped: {it.effect}</p>}
-                  <p className="muted">{bad ? 'Not covered. ' : ''}Running total {money(run)}</p>
+              <Swipe key={it.id} onRemove={() => set({ items: items.filter((x) => x.id !== it.id) })}>
+                <span className={'rk' + (bad ? ' bad' : '')}>{i + 1}</span>
+                <div className={'grow' + (bad ? ' bad' : '')}>
+                  <b>{it.name}</b>
+                  <small>{it.kind === 'need' ? 'Need' : 'Want'}{bad ? ' · Not covered' : ''}{it.effect ? ' · If skipped: ' + it.effect : ''}</small>
                 </div>
-                <div className="r col">
-                  <b>{money(it.amount)}</b>
-                  <span>
-                    <button className="x" onClick={() => move(i, -1)} aria-label="Move up">↑</button>
-                    <button className="x" onClick={() => move(i, 1)} aria-label="Move down">↓</button>
-                    <button className="x" onClick={() => set({ items: items.filter((x) => x.id !== it.id) })} aria-label="Remove">×</button>
+                <div className="side">
+                  <b className={'amt' + (bad ? ' bad' : '')}>{cur}{it.amount.toLocaleString()}</b>
+                  <span className="mv">
+                    <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up">↑</button>
+                    <button type="button" onClick={() => move(i, 1)} disabled={i === n - 1} aria-label="Move down">↓</button>
                   </span>
                 </div>
-              </li>
+              </Swipe>
             )
           })}
         </ul>
-      </section>
+        <p className="gf">Swipe left to delete. Items turn red once the money runs out.</p>
+      </>}
     </>
   )
 }
 
-function SummaryTab({ data, set, money, total, have, spent, left, over }) {
-  const { items } = data
+function SummaryStep({ items, total, spent, left, over, have, cur, set, data }) {
+  const m = (v) => cur + Number(v).toLocaleString()
   const needs = sum(items.filter((i) => i.kind === 'need'))
   const wants = sum(items.filter((i) => i.kind === 'want'))
   let run = 0
   const covered = [], cut = []
   items.forEach((i) => { run += i.amount; (run > total ? cut : covered).push(i) })
-  const pct = (v) => (spent ? Math.round((v / spent) * 100) : 0)
+  const base = Math.max(total, spent) || 1
 
   const exportJson = () => {
     const a = document.createElement('a')
@@ -235,39 +366,43 @@ function SummaryTab({ data, set, money, total, have, spent, left, over }) {
 
   return (
     <>
-      <section>
-        <h2>Summary</h2>
-        <div className="stats">
-          <div><small>Total money</small><b>{money(total)}</b></div>
-          <div><small>In hand</small><b>{money(have)}</b></div>
-          <div><small>Planned spend</small><b>{money(spent)}</b></div>
-          <div className={over ? 'neg' : ''}><small>{over ? 'Short by' : 'Left over'}</small><b>{money(Math.abs(left))}</b></div>
+      {!over && items.length > 0 && <Confetti />}
+      <section className="card verdict">
+        <b>{items.length === 0 ? 'Nothing planned yet.' : over ? `You are ${m(-left)} short.` : `You will have ${m(left)} left.`}</b>
+        <p>{items.length === 0 ? 'Add items on the List tab.' : over ? 'The red items cannot be covered. Cut them or find more money.' : 'Everything on your list is covered.'}</p>
+      </section>
+
+      <section className="card">
+        <div className="split">
+          <i className="n" style={{ width: (needs / base) * 100 + '%' }} />
+          <i className="w" style={{ width: (wants / base) * 100 + '%' }} />
         </div>
-        {over && <p className="err">Your list is {money(-left)} above your money. Items marked red are the ones you can't cover, lowest priority first.</p>}
+        <div className="legend"><span><b className="k n" />Needs {m(needs)}</span><span><b className="k w" />Wants {m(wants)}</span></div>
       </section>
 
-      <section>
-        <h2>Needs vs wants</h2>
-        <div className="bar"><i style={{ width: pct(needs) + '%' }} /></div>
-        <p className="muted">Needs {money(needs)} ({pct(needs)}%). Wants {money(wants)} ({pct(wants)}%).</p>
-      </section>
+      <div className="group">
+        <div className="cell"><span>Total money</span><span className="val">{m(total)}</span></div>
+        <div className="cell"><span>In hand now</span><span className="val">{m(have)}</span></div>
+        <div className="cell"><span>Still expected</span><span className="val">{m(total - have)}</span></div>
+        <div className="cell"><span>Planned spend</span><span className="val">{m(spent)}</span></div>
+      </div>
 
-      <section>
-        <h2>What you can afford</h2>
-        {covered.length === 0 && <p className="muted">Nothing covered yet.</p>}
-        <ul className="plain">{covered.map((i) => <li key={i.id}>{i.name} <span className="muted">{money(i.amount)}</span></li>)}</ul>
-        {cut.length > 0 && <>
-          <h2 className="neg">Not covered</h2>
-          <ul className="plain">{cut.map((i) => <li key={i.id} className="neg">{i.name} <span>{money(i.amount)}</span>{i.effect && <em> (if skipped: {i.effect})</em>}</li>)}</ul>
-        </>}
-      </section>
+      {covered.length > 0 && <>
+        <p className="gh">Covered</p>
+        <ul className="group">{covered.map((i) => <li className="cell" key={i.id}><span className="grow">{i.name}</span><span className="val">{m(i.amount)}</span></li>)}</ul>
+      </>}
+      {cut.length > 0 && <>
+        <p className="gh bad">Not covered</p>
+        <ul className="group">{cut.map((i) => <li className="cell tall bad" key={i.id}><span className="grow">{i.name}{i.effect && <small>If skipped: {i.effect}</small>}</span><span className="val">{m(i.amount)}</span></li>)}</ul>
+      </>}
 
-      <section className="foot">
-        <button className="btn ghost" onClick={exportJson}>Export backup</button>
-        <label className="btn ghost">Import backup<input type="file" accept="application/json" hidden onChange={importJson} /></label>
-        <button className="btn ghost" onClick={reset}>Start over</button>
-        <button className="btn ghost" onClick={() => { sessionStorage.removeItem('spendplan.auth'); location.reload() }}>Sign out</button>
-      </section>
+      <div className="group">
+        <button className="cell tap" onClick={exportJson}>Export backup</button>
+        <label className="cell tap">Import backup<input type="file" accept="application/json" hidden onChange={importJson} /></label>
+        <button className="cell tap" onClick={() => { sessionStorage.removeItem('spendplan.auth'); location.reload() }}>Sign out</button>
+        <button className="cell tap danger" onClick={reset}>Start over</button>
+      </div>
+      <p className="ver">Spend Plan {VERSION}</p>
     </>
   )
 }
