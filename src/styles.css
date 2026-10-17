@@ -129,3 +129,36 @@ form > .btn { margin-top:0 }
 .login .group { text-align:left } .login .btn { margin-top:6px }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none !important; transition:none !important } }
+
+/* widgets */
+.widget { position:relative; overflow:hidden; display:flex; flex-direction:column; width:100%; text-align:left; border:0; color:inherit; border-radius:30px; padding:16px 18px; background:linear-gradient(160deg,color-mix(in srgb,var(--a1) 34%,#0b0b15),color-mix(in srgb,var(--a2) 16%,#090911)); box-shadow:0 22px 42px -18px rgba(0,0,0,.85), inset 0 1px 0 rgba(255,255,255,.2); transition:transform .35s var(--spring); cursor:pointer }
+.widget::before { content:''; position:absolute; right:-25%; bottom:-45%; width:80%; aspect-ratio:1; border-radius:50%; background:var(--a2); filter:blur(48px); opacity:.26; pointer-events:none }
+.widget > * { position:relative } .widget:active { transform:scale(.97) }
+.widget.alert { background:linear-gradient(160deg,color-mix(in srgb,#ff3b4e 38%,#0b0b15),#0b0810) }
+.wm { flex-direction:row; align-items:center; gap:12px; aspect-ratio:2.1; margin-bottom:12px }
+.wl { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px }
+.wlab { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--label2) }
+.wdot { width:8px; height:8px; border-radius:50%; background:linear-gradient(135deg,var(--a1),var(--a2)); box-shadow:0 0 10px var(--a1) }
+.wbig { font-family:ui-rounded,'SF Pro Rounded',-apple-system,sans-serif; font-size:clamp(30px,9.5vw,42px); font-weight:800; letter-spacing:-1px; line-height:1.05; font-variant-numeric:tabular-nums; background:linear-gradient(100deg,#fff,var(--a2)); -webkit-background-clip:text; background-clip:text; color:transparent }
+.wbig.sm { font-size:clamp(24px,7.4vw,32px) }
+.wsub { font-size:12px; color:var(--label2) }
+.wchips { display:flex; gap:6px; margin-top:6px }
+.chip { font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; background:rgba(255,255,255,.12) } .chip.ok { color:var(--a2) } .chip.bad { background:#ff3b4e; color:#fff }
+.wm .ring { width:76px; height:76px } .wm .ring b { font-size:15px }
+.wgrid { display:grid; grid-template-columns:1fr 1fr; gap:12px }
+.ws { aspect-ratio:1; justify-content:space-between; cursor:default } .ws:active { transform:none }
+.wname { font-family:ui-rounded,-apple-system,sans-serif; font-size:20px; font-weight:800; line-height:1.15; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden }
+.wok { color:var(--a2); filter:drop-shadow(0 0 10px var(--a2)) } .wok svg { width:44px; height:44px }
+.wbar { height:6px; border-radius:6px; background:rgba(255,255,255,.12); overflow:hidden; margin-bottom:6px } .wbar i { display:block; height:100%; border-radius:6px; background:linear-gradient(90deg,var(--a1),var(--a2)); transition:width 1s var(--spring) }
+.wsplit { display:flex; justify-content:space-between; gap:8px; min-width:0 } .wsplit b { display:block; font-size:13px; font-variant-numeric:tabular-nums } .wsplit small { font-size:11px }
+.ws .split { height:8px }
+.wcap { margin:-4px 16px 22px }
+.glance { min-height:100dvh; padding:calc(env(safe-area-inset-top) + 70px) 18px calc(env(safe-area-inset-bottom) + 40px); display:flex; justify-content:center }
+.gwrap { width:100%; max-width:420px }
+.gwrap .wm { margin-bottom:0 } .gwrap { display:flex; flex-direction:column; gap:12px }
+.geye { margin:0 6px; font-size:12px; font-weight:700; letter-spacing:1.4px; text-transform:uppercase; color:var(--a2) }
+.ghint { text-align:center; color:var(--label3); font-size:13px; margin:6px 0 0 }
+.gclose { position:fixed; z-index:30; top:calc(env(safe-area-inset-top) + 14px); left:16px; padding:8px 18px; border-radius:20px; border:1px solid rgba(255,255,255,.14); background:color-mix(in srgb,var(--bg) 55%,transparent); -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px); font-weight:600; cursor:pointer; transition:transform .2s var(--spring) } .gclose:active { transform:scale(.94) }
+.cell input.switch { -webkit-appearance:none; appearance:none; flex:none; width:51px; height:31px; padding:0; margin-left:auto; border-radius:31px; background:rgba(255,255,255,.16); position:relative; cursor:pointer; transition:background .3s }
+.cell input.switch::after { content:''; position:absolute; top:2px; left:2px; width:27px; height:27px; border-radius:50%; background:#fff; box-shadow:0 2px 6px rgba(0,0,0,.4); transition:transform .4s var(--spring) }
+.cell input.switch:checked { background:linear-gradient(135deg,var(--a1),var(--a2)) } .cell input.switch:checked::after { transform:translateX(20px) }

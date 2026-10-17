@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 
-const VERSION = 'v4'
+const VERSION = 'v5'
+const AUTH = 'spendplan.auth'
+const isAuthed = () => sessionStorage.getItem(AUTH) === '1' || localStorage.getItem(AUTH) === '1'
+const wantsGlance = () => new URLSearchParams(location.search).get('view') === 'glance'
 const THEMES = [['aurora', 'Aurora'], ['mint', 'Mint'], ['citrus', 'Citrus'], ['orchid', 'Orchid']]
 const KEY = 'spendplan.v1'
 const EMAIL = import.meta.env.VITE_AUTH_EMAIL
@@ -76,6 +79,72 @@ function Confetti() {
 
 const Bg = () => <div className="bg"><i /><i /><i /></div>
 
+const money = (cur, v) => cur + Number(v).toLocaleString()
+const Check = () => <Svg size={26}><circle cx="12" cy="12" r="9" /><path d="M8 12.5l3 3 5-6" strokeWidth="2.2" /></Svg>
+
+function WMedium({ w, onClick }) {
+  const { plan, cur, left, total, over, stats } = w
+  return (
+    <button className="widget wm" onClick={onClick}>
+      <div className="wl">
+        <span className="wlab"><i className="wdot" />{plan.name || 'Spend Plan'}</span>
+        <span className="wbig">{money(cur, Math.abs(left))}</span>
+        <span className="wsub">{over ? 'over budget' : 'left to spend'}{total ? ' · of ' + money(cur, total) : ''}</span>
+        <span className="wchips"><b className="chip ok">{stats.covered.length} covered</b>{stats.cut.length > 0 && <b className="chip bad">{stats.cut.length} short</b>}</span>
+      </div>
+      <Ring pct={stats.pct} />
+    </button>
+  )
+}
+
+function WSmalls({ w }) {
+  const { cur, left, total, over, stats } = w
+  const base = Math.max(total, stats.spent) || 1
+  const next = stats.cut[0]
+  return (
+    <div className="wgrid">
+      <div className="widget ws">
+        <span className="wlab">{over ? 'Over by' : 'Left'}</span>
+        <span className="wbig sm">{money(cur, Math.abs(left))}</span>
+        <div><div className="wbar"><i style={{ width: Math.min(100, stats.pct) + '%' }} /></div><span className="wsub">{Math.round(stats.pct)}% planned</span></div>
+      </div>
+      <div className="widget ws">
+        <span className="wlab">In hand</span>
+        <span className="wbig sm">{money(cur, stats.have)}</span>
+        <span className="wsub">+ {money(cur, total - stats.have)} expected</span>
+      </div>
+      <div className={'widget ws' + (next ? ' alert' : '')}>
+        <span className="wlab">{next ? 'Cannot cover' : 'Status'}</span>
+        {next ? <><span className="wname">{next.name}</span><span className="wsub">{money(cur, next.amount)}{stats.cut.length > 1 ? ` + ${stats.cut.length - 1} more` : ''}</span></>
+          : <><span className="wok"><Check /></span><span className="wsub">{stats.covered.length ? 'All covered' : 'Nothing planned yet'}</span></>}
+      </div>
+      <div className="widget ws">
+        <span className="wlab">Needs vs wants</span>
+        <div className="wsplit">
+          <span><b>{money(cur, stats.needs)}</b><small>Needs</small></span>
+          <span><b>{money(cur, stats.wants)}</b><small>Wants</small></span>
+        </div>
+        <div className="split"><i className="n" style={{ width: (stats.needs / base) * 100 + '%' }} /><i className="w" style={{ width: (stats.wants / base) * 100 + '%' }} /></div>
+      </div>
+    </div>
+  )
+}
+
+function Glance({ w, onClose }) {
+  return (
+    <div className="glance">
+      <Bg />
+      <button className="gclose" onClick={onClose}>Done</button>
+      <div className="gwrap step fwd">
+        <p className="geye">{w.period || 'Your plan'}</p>
+        <WMedium w={w} onClick={onClose} />
+        <WSmalls w={w} />
+        <p className="ghint">Live from your plan. Updates the moment you change it.</p>
+      </div>
+    </div>
+  )
+}
+
 function Seg({ value, options, onChange }) {
   const i = options.findIndex((o) => o[0] === value)
   return (
@@ -119,10 +188,11 @@ function Login({ onOk }) {
   const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
   const [err, setErr] = useState('')
+  const [stay, setStay] = useState(true)
   const submit = (e) => {
     e.preventDefault()
     if (email.trim().toLowerCase() === (EMAIL || '').toLowerCase() && pass === PASS) {
-      sessionStorage.setItem('spendplan.auth', '1'); onOk()
+      sessionStorage.setItem(AUTH, '1'); if (stay) localStorage.setItem(AUTH, '1'); onOk()
     } else setErr('That email or password is not right.')
   }
   return (
@@ -134,6 +204,7 @@ function Login({ onOk }) {
         <div className="group">
           <label className="cell in"><span>Email</span><input type="email" value={email} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} autoFocus /></label>
           <label className="cell in"><span>Password</span><input type="password" value={pass} placeholder="Required" onChange={(e) => setPass(e.target.value)} /></label>
+          <label className="cell"><span>Stay signed in</span><input type="checkbox" className="switch" checked={stay} onChange={(e) => setStay(e.target.checked)} /></label>
         </div>
         {err && <p className="err">{err}</p>}
         <button className="btn">Sign in</button>
@@ -143,12 +214,13 @@ function Login({ onOk }) {
 }
 
 export default function App() {
-  const [authed, setAuthed] = useState(sessionStorage.getItem('spendplan.auth') === '1')
+  const [authed, setAuthed] = useState(isAuthed)
   const [data, setData] = useState(load)
   const [step, setStep] = useState(() => { const d = load(); return d.items.length ? 2 : d.sources.length ? 1 : 0 })
   const [dir, setDir] = useState('fwd')
   const [theme, setTheme] = useState(() => localStorage.getItem('spendplan.theme') || 'aurora')
   const [pulse, setPulse] = useState(false)
+  const [glance, setGlance] = useState(wantsGlance)
   const first = useRef(true)
   useEffect(() => { localStorage.setItem(KEY, JSON.stringify(data)) }, [data])
   useEffect(() => { document.body.dataset.theme = theme; localStorage.setItem('spendplan.theme', theme) }, [theme])
@@ -159,13 +231,33 @@ export default function App() {
   const spent = sum(items)
   const left = total - spent
   const over = items.length > 0 && left < 0
+  const have = sum(sources.filter((x) => x.status === 'have'))
+  let run = 0
+  const covered = [], cut = []
+  items.forEach((i) => { run += i.amount; (run > total ? cut : covered).push(i) })
+  const pct = total ? Math.min(100, (spent / total) * 100) : spent ? 100 : 0
+  const stats = { covered, cut, have, spent, pct, needs: sum(items.filter((i) => i.kind === 'need')), wants: sum(items.filter((i) => i.kind === 'want')) }
   useEffect(() => { document.body.classList.toggle('over', over) }, [over])
+  useEffect(() => {
+    const onStorage = (e) => { if (e.key === KEY) setData(load()) }
+    window.addEventListener('storage', onStorage); return () => window.removeEventListener('storage', onStorage)
+  }, [])
+  useEffect(() => {
+    if (!('setAppBadge' in navigator)) return
+    const n = cut.length
+    try { (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {}) } catch { /* ignore */ }
+  }, [cut.length])
   useEffect(() => {
     if (first.current) { first.current = false; return }
     setPulse(true); const t = setTimeout(() => setPulse(false), 650); return () => clearTimeout(t)
   }, [left])
 
   if (!authed) return <Login onOk={() => setAuthed(true)} />
+  const period0 = plan.type === 'month'
+    ? (plan.month ? new Date(plan.month + '-01T00:00').toLocaleDateString('en', { month: 'long', year: 'numeric' }) : '')
+    : [fmtDate(plan.start), fmtDate(plan.end)].filter(Boolean).join(' to ')
+  const w = { plan, cur, left, total, over, stats, period: period0 }
+  if (glance) return <Glance w={w} onClose={() => { setGlance(false); history.replaceState(null, '', location.pathname) }} />
 
   const set = (patch) => setData((d) => ({ ...d, ...patch }))
   const go = (n) => { if (n === step) return; setDir(n > step ? 'fwd' : 'back'); setStep(n); window.scrollTo({ top: 0, behavior: 'smooth' }) }
@@ -173,9 +265,9 @@ export default function App() {
   const period = plan.type === 'month'
     ? (plan.month ? new Date(plan.month + '-01T00:00').toLocaleDateString('en', { month: 'long', year: 'numeric' }) : '')
     : [fmtDate(plan.start), fmtDate(plan.end)].filter(Boolean).join(' to ')
-  const pct = total ? Math.min(100, (spent / total) * 100) : spent ? 100 : 0
-  const have = sum(sources.filter((s) => s.status === 'have'))
-  const common = { plan, sources, items, set, cur, total, spent, left, over, have }
+
+
+  const common = { plan, sources, items, set, cur, total, spent, left, over, have, stats }
 
   return (
     <div className="app">
@@ -194,19 +286,19 @@ export default function App() {
         <h1 key={"t" + step} className="large fade">{STEPS[step]}</h1>
         <p className="sub">{SUBS[step]}{period && step === 0 ? '' : ''}</p>
 
-        <section className="card hero">
+        {step < 2 && <section className="card hero">
           <div className="hl">
             <span className="lab">{over ? 'Over budget by' : 'Left to spend'}</span>
             <div className={'big' + (pulse ? ' pulse' : '')}><Num value={Math.abs(left)} prefix={cur} /></div>
             <span className="lab small">{total ? `of ${cur}${total.toLocaleString()}` : 'Add your money to begin'}{period ? ' · ' + period : ''}</span>
           </div>
           <Ring pct={pct} />
-        </section>
+        </section>}
 
         <div key={"s" + step} className={'step ' + dir}>
           {step === 0 && <PlanStep {...common} />}
           {step === 1 && <ListStep {...common} />}
-          {step === 2 && <SummaryStep {...common} data={data} />}
+          {step === 2 && <SummaryStep {...common} data={data} onGlance={() => setGlance(true)} />}
           {step < 2 && <button className="btn" disabled={!canNext} onClick={() => go(step + 1)}>{step === 0 ? 'Continue to List' : 'See Summary'}</button>}
         </div>
       </main>
@@ -344,7 +436,7 @@ function ListStep({ items, set, cur, total }) {
   )
 }
 
-function SummaryStep({ items, total, spent, left, over, have, cur, set, data }) {
+function SummaryStep({ items, total, spent, left, over, have, cur, set, data, plan, stats, onGlance }) {
   const m = (v) => cur + Number(v).toLocaleString()
   const needs = sum(items.filter((i) => i.kind === 'need'))
   const wants = sum(items.filter((i) => i.kind === 'want'))
@@ -367,6 +459,8 @@ function SummaryStep({ items, total, spent, left, over, have, cur, set, data }) 
   return (
     <>
       {!over && items.length > 0 && <Confetti />}
+      <WMedium w={{ plan, cur, left, total, over, stats }} onClick={onGlance} />
+      <p className="gf wcap">Tap the widget for Glance, a full-screen view to keep open.</p>
       <section className="card verdict">
         <b>{items.length === 0 ? 'Nothing planned yet.' : over ? `You are ${m(-left)} short.` : `You will have ${m(left)} left.`}</b>
         <p>{items.length === 0 ? 'Add items on the List tab.' : over ? 'The red items cannot be covered. Cut them or find more money.' : 'Everything on your list is covered.'}</p>
@@ -399,7 +493,7 @@ function SummaryStep({ items, total, spent, left, over, have, cur, set, data }) 
       <div className="group">
         <button className="cell tap" onClick={exportJson}>Export backup</button>
         <label className="cell tap">Import backup<input type="file" accept="application/json" hidden onChange={importJson} /></label>
-        <button className="cell tap" onClick={() => { sessionStorage.removeItem('spendplan.auth'); location.reload() }}>Sign out</button>
+        <button className="cell tap" onClick={() => { sessionStorage.removeItem(AUTH); localStorage.removeItem(AUTH); location.reload() }}>Sign out</button>
         <button className="cell tap danger" onClick={reset}>Start over</button>
       </div>
       <p className="ver">Spend Plan {VERSION}</p>
