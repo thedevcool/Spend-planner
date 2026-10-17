@@ -185,14 +185,28 @@ function Seg({ value, options, onChange }) {
   )
 }
 
-function Swipe({ children, onRemove }) {
+// Swipe left to uncover row actions. Rows that pass onEdit reveal two buttons and
+// stay open until one is tapped; a lone action keeps the old swipe-past-to-delete travel.
+function Swipe({ children, onRemove, onEdit }) {
   const [dx, setDx] = useState(0)
   const [out, setOut] = useState(false)
   const st = useRef(null)
+  const acts = onEdit ? 184 : 160
+  const open = onEdit ? 184 : 88
   const remove = () => { setOut(true); setTimeout(onRemove, 280) }
+  const edit = () => { setDx(0); onEdit() }
+  const end = () => {
+    const s = st.current; st.current = null
+    if (!s) return
+    if (!onEdit && dx < -130) return remove()
+    setDx(dx < -open / 2 ? -open : 0)
+  }
   return (
     <li className={'swipe' + (out ? ' out' : '')}>
-      <button className="del" onClick={remove} tabIndex={-1}>Delete</button>
+      <div className={'acts' + (onEdit ? '' : ' solo')} style={{ width: acts }}>
+        {onEdit && <button className="act edit" onClick={edit} tabIndex={-1}>Edit</button>}
+        <button className="act del" onClick={remove} tabIndex={-1}>Delete</button>
+      </div>
       <div
         className="slide"
         style={{ transform: `translateX(${dx}px)`, transition: st.current ? 'none' : undefined }}
@@ -201,11 +215,13 @@ function Swipe({ children, onRemove }) {
           const s = st.current; if (!s) return
           const x = e.touches[0].clientX - s.x, y = e.touches[0].clientY - s.y
           if (s.lock === null && (Math.abs(x) > 8 || Math.abs(y) > 8)) s.lock = Math.abs(x) > Math.abs(y) ? 'h' : 'v'
-          if (s.lock === 'h') setDx(Math.max(-160, Math.min(0, s.base + x)))
+          if (s.lock === 'h') setDx(Math.max(-acts, Math.min(0, s.base + x)))
         }}
-        onTouchEnd={() => { const s = st.current; st.current = null; if (!s) return; if (dx < -130) return remove(); setDx(dx < -44 ? -88 : 0) }}
+        onTouchEnd={end}
+        onClick={(e) => { if (dx !== 0 && !e.target.closest('button')) setDx(0) }}
       >
         {children}
+        {onEdit && <button className="ri" aria-label="Edit" onClick={edit}><Svg size={19}><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z" /><path d="M13.5 6.5l3 3" /></Svg></button>}
         <button className="x" aria-label="Delete" onClick={remove}>×</button>
       </div>
     </li>
@@ -614,9 +630,56 @@ function PlanStep({ plan, sources, set, cur }) {
   )
 }
 
+// Small centred sheet over a blurred backdrop, iOS alert style.
+function Sheet({ title, onClose, children }) {
+  const close = useRef(onClose)
+  close.current = onClose
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') close.current() }
+    window.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
+  }, [])
+  return (
+    <div className="mscrim" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>{children}</div>
+    </div>
+  )
+}
+
+function EditItem({ item, cur, onSave, onClose }) {
+  const [f, setF] = useState({ name: item.name, amount: String(item.amount), kind: item.kind, effect: item.effect || '' })
+  const canSave = !!f.name.trim() && !!Number(f.amount)
+  const save = (e) => {
+    e.preventDefault()
+    if (!canSave) return
+    onSave({ name: f.name.trim(), amount: Number(f.amount), kind: f.kind, effect: f.effect.trim() })
+    onClose()
+  }
+  return (
+    <Sheet title="Edit item" onClose={onClose}>
+      <form onSubmit={save}>
+        <h2 className="mtitle">Edit item</h2>
+        <Seg value={f.kind} onChange={(v) => setF({ ...f, kind: v })} options={[['need', 'Need'], ['want', 'Want']]} />
+        <div className="group">
+          <label className="cell in"><span>Item</span><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
+          <label className="cell in"><span>Cost ({cur})</span><input type="number" inputMode="decimal" min="0" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></label>
+          <label className="cell in"><span>If skipped</span><input value={f.effect} placeholder="What goes wrong?" onChange={(e) => setF({ ...f, effect: e.target.value })} /></label>
+        </div>
+        <div className="mact">
+          <button type="button" className="mbtn" onClick={onClose}>Cancel</button>
+          <button className="mbtn primary" disabled={!canSave}>Save</button>
+        </div>
+      </form>
+    </Sheet>
+  )
+}
+
 function ListStep({ items, set, cur, total }) {
   const n = items.length
   const [f, setF] = useState({ name: '', kind: 'need', rank: n + 1, amount: '', effect: '' })
+  const [editing, setEditing] = useState(null)
   const rank = Math.min(f.rank, n + 1)
   const add = (e) => {
     e.preventDefault()
@@ -662,7 +725,7 @@ function ListStep({ items, set, cur, total }) {
             run += it.amount
             const bad = run > total
             return (
-              <Swipe key={it.id} onRemove={() => set({ items: items.filter((x) => x.id !== it.id) })}>
+              <Swipe key={it.id} onRemove={() => set({ items: items.filter((x) => x.id !== it.id) })} onEdit={() => setEditing(it)}>
                 <span className={'rk' + (bad ? ' bad' : '')}>{i + 1}</span>
                 <div className={'grow' + (bad ? ' bad' : '')}>
                   <b>{it.name}</b>
@@ -679,8 +742,11 @@ function ListStep({ items, set, cur, total }) {
             )
           })}
         </ul>
-        <p className="gf">Swipe left to delete. Items turn red once the money runs out.</p>
+        <p className="gf">Swipe left to delete or edit. Items turn red once the money runs out.</p>
       </>}
+
+      {editing && <EditItem item={editing} cur={cur} onClose={() => setEditing(null)}
+        onSave={(patch) => set({ items: items.map((x) => (x.id === editing.id ? { ...x, ...patch } : x)) })} />}
     </>
   )
 }

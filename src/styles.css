@@ -92,12 +92,31 @@ form > .btn { margin-top:0 }
 .list .swipe.out { max-height:0; opacity:0 }
 .slide { display:flex; align-items:center; gap:12px; padding:12px 16px; background:linear-gradient(rgba(255,255,255,.06),rgba(255,255,255,.06)), var(--solid); position:relative; z-index:1; transition:transform .4s var(--spring); animation:rowin .7s var(--spring) backwards }
 @keyframes rowin { from { opacity:0; transform:translateY(-10px) scale(.96); background:color-mix(in srgb,var(--a1) 45%,var(--solid)) } }
-.del { position:absolute; top:0; bottom:0; right:0; width:160px; padding-right:24px; background:#ff3b4e; color:#fff; border:0; text-align:right; font-weight:700; font-size:15px }
+.acts { position:absolute; top:0; bottom:0; right:0; display:flex }
+.act { flex:1 1 0; min-width:0; display:flex; align-items:center; justify-content:center; border:0; padding:0 8px; color:#fff; font-weight:700; font-size:15px; cursor:pointer }
+.act.del { background:#ff3b4e }
+.act.edit { background:#8e8e93 }
+.acts.solo .act.del { justify-content:flex-end; padding-right:24px }
 .amt { font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap } .amt.bad { color:var(--a1) }
 .side { display:flex; flex-direction:column; align-items:flex-end }
 .mv button { background:none; border:0; color:var(--label2); padding:2px 8px; cursor:pointer; transition:color .2s, transform .15s } .mv button:active { transform:scale(.8) } .mv button:disabled { opacity:.25 }
-.x { display:none; background:none; border:0; color:var(--label2); font-size:22px; cursor:pointer; padding:0 2px }
-@media (hover:hover) and (pointer:fine) { .x { display:block } }
+.x, .ri { display:none; background:none; border:0; color:var(--label2); cursor:pointer; padding:0 2px }
+.x { font-size:22px }
+.ri { line-height:0 }
+@media (hover:hover) and (pointer:fine) { .x, .ri { display:block } }
+
+/* edit sheet */
+.mscrim { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px); background:rgba(4,4,10,.5); -webkit-backdrop-filter:blur(14px) saturate(140%); backdrop-filter:blur(14px) saturate(140%); animation:fadein .25s ease }
+.modal { position:relative; width:min(400px,100%); max-height:100%; overflow-y:auto; overscroll-behavior:contain; padding:18px 16px 16px; border-radius:24px; border:1px solid rgba(255,255,255,.12); background:linear-gradient(180deg,rgba(24,24,38,.96),rgba(10,10,18,.98)), var(--solid); box-shadow:0 30px 70px -24px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.1); animation:pop .45s var(--spring) }
+@keyframes pop { from { opacity:0; transform:scale(.92) translateY(14px) } }
+.mtitle { font-family:ui-rounded,'SF Pro Rounded',-apple-system,sans-serif; font-size:21px; font-weight:800; margin:2px 4px 14px; text-align:center }
+.modal .seg { margin-bottom:14px }
+.modal .cell.in > span:first-child { width:92px }
+.mact { display:flex; gap:10px }
+.mbtn { flex:1; padding:14px; border:0; border-radius:16px; background:rgba(255,255,255,.1); color:var(--label); font-size:16px; font-weight:600; cursor:pointer; transition:transform .22s var(--spring), background .25s }
+.mbtn:active { transform:scale(.96) }
+.mbtn.primary { background:linear-gradient(135deg,var(--a1),var(--a2)); color:var(--ink); font-weight:700 }
+.mbtn.primary:disabled { opacity:.35 }
 .pip { width:11px; height:11px; border-radius:50%; border:2px solid var(--a2); flex:none } .pip.fill { background:linear-gradient(135deg,var(--a1),var(--a2)); border-color:transparent; box-shadow:0 0 10px var(--a1) }
 .rk { flex:none; display:grid; place-items:center; width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--a1),var(--a2)); color:var(--ink); font-size:15px; font-weight:800; font-variant-numeric:tabular-nums; box-shadow:0 6px 14px -4px color-mix(in srgb,var(--a1) 70%,transparent) }
 .rk.bad { background:#ff3b4e; color:#fff; animation:alarm-badge 1.6s ease-in-out infinite } @keyframes alarm-badge { 50% { box-shadow:0 0 0 6px rgba(255,59,78,.2) } }
@@ -210,3 +229,12 @@ form > .btn { margin-top:0 }
 .cadd:active { transform:scale(.92) } .cadd:disabled { opacity:.3; box-shadow:none }
 .car { display:inline-block; width:6px; height:6px; border-right:1.6px solid currentColor; border-bottom:1.6px solid currentColor; transform:rotate(45deg); transition:transform .3s var(--spring) }
 .car.up { transform:rotate(-135deg) }
+
+/* narrow phones: give inputs room by tightening the label column and gutters */
+@media (max-width:380px) {
+  .page { padding-left:12px; padding-right:12px }
+  .gh, .gf { margin-left:12px; margin-right:12px }
+  .cell.in > span:first-child { width:100px }
+  h1.large { font-size:34px }
+  .act { font-size:14px }
+}
