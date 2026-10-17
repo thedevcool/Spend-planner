@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { supabase, authMsg } from './supabase.js'
+import { supabase, authMsg, warmAuth } from './supabase.js'
 
 const VERSION = 'v6'
 const wantsGlance = () => new URLSearchParams(location.search).get('view') === 'glance'
@@ -219,10 +219,16 @@ function Login() {
   const [err, setErr] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
+  const [slow, setSlow] = useState(false)
+
+  // Start the handshake while the screen is idle so signing in does not pay for it.
+  useEffect(() => { warmAuth() }, [])
+
   const submit = async (e) => {
     e.preventDefault()
     if (busy) return
     setErr(''); setNote(''); setBusy(true)
+    const slowTimer = setTimeout(() => setSlow(true), 2500)
     const creds = { email: email.trim().toLowerCase(), password: pass }
     try {
       // Call on the client, never as a detached reference: the auth methods need `this`.
@@ -235,7 +241,7 @@ function Login() {
     } catch (err) {
       setErr(authMsg(err))
     } finally {
-      setBusy(false)
+      clearTimeout(slowTimer); setSlow(false); setBusy(false)
     }
   }
   if (!supabase) return (
@@ -250,14 +256,15 @@ function Login() {
       <div className="logo"><i /></div>
       <h1>Spend Plan</h1>
       <p className="sub">{mode === 'in' ? 'Sign in to continue.' : 'Create your account.'}</p>
-      <form onSubmit={submit}>
+      <form onSubmit={submit} onFocus={warmAuth}>
         <div className="group">
           <label className="cell in"><span>Email</span><input type="email" value={email} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} autoFocus required /></label>
           <label className="cell in"><span>Password</span><input type="password" minLength={6} value={pass} placeholder={mode === 'up' ? 'At least 6 characters' : 'Required'} onChange={(e) => setPass(e.target.value)} required /></label>
         </div>
         {err && <p className="err">{err}</p>}
         {note && <p className="ghint">{note}</p>}
-        <button className="btn" disabled={busy}>{busy ? 'Working…' : mode === 'in' ? 'Sign in' : 'Create account'}</button>
+        {busy && slow && <p className="ghint">Connecting… the first sign-in can take a few seconds on some networks.</p>}
+        <button className="btn" disabled={busy}>{busy ? (slow ? 'Connecting…' : 'Working…') : mode === 'in' ? 'Sign in' : 'Create account'}</button>
       </form>
       <div className="group" style={{ marginTop: 22 }}>
         <button type="button" className="cell tap" onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setErr(''); setNote('') }}>
